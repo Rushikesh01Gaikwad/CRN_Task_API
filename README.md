@@ -1,201 +1,336 @@
-# RESTful Backend API Solution — CRN Technical Assessment
+# 🚀 RESTful Backend API — CRN Technical Solution
 
-An enterprise-grade, scalable, and maintainable RESTful API solution built with **.NET 8**, **C#**, and **Clean Architecture** principles.
+An enterprise-grade, scalable, and maintainable RESTful Web API built with **.NET 8**, **C# 12**, and **Clean Architecture** principles, designed to power the Angular frontend client with robust CRUD operations, hierarchical sub-resource management, JWT authentication with token rotation, and resilient database access.
 
 ---
 
-## 🏛️ Architecture Overview
+## 📑 Table of Contents
+1. [Architectural Overview](#-architectural-overview)
+2. [What Was Built (Completed Work)](#-what-was-built-completed-work)
+3. [End-to-End Connectivity: API & UI Flow](#-end-to-end-connectivity-api--ui-flow)
+4. [Tech Stack & Dependencies](#-tech-stack--dependencies)
+5. [Database Schema & Relationships](#-database-schema--relationships)
+6. [API Endpoints Reference](#-api-endpoints-reference)
+7. [Authentication & Security Architecture](#-authentication--security-architecture)
+8. [CORS & Frontend Integration](#-cors--frontend-integration)
+9. [Running the API Locally](#-running-the-api-locally)
+10. [Docker & Containerization](#-docker--containerization)
+11. [Testing & Quality Assurance](#-testing--quality-assurance)
 
-The solution adheres strictly to **Clean Architecture** (Separation of Concerns and Dependency Inversion Principle). Dependencies point inward toward the core Domain.
+---
+
+## 🏛️ Architectural Overview
+
+The backend strictly adheres to **Clean Architecture** (Separation of Concerns and the Dependency Inversion Principle). Dependencies flow strictly inward toward the domain layer:
 
 ```
-Solution/
+CRUD_API/
+├── Database/                   # SQL Server Management Studio (SSMS) Scripts
+│   ├── CreateDatabase.sql      # Database DDL, Tables, Foreign Keys, Indexes
+│   └── SeedData.sql            # Demo data: Products, Items & Default Admin User
+│
 ├── src/
-│   ├── API/                       # ASP.NET Core Web API (Controllers, Versioning, Middleware, Filters)
-│   ├── Application/               # Application Logic (DTOs, Interfaces, Services, Validators, Mapping)
-│   ├── Domain/                    # Enterprise Core (Entities, Enums, Events, Exceptions)
-│   └── Infrastructure/            # External Concerns (EF Core, Repositories, Unit of Work, Identity, JWT)
-├── tests/
-│   ├── API.Tests/                 # End-to-end Integration Tests using WebApplicationFactory
-│   ├── Application.Tests/         # Unit Tests with xUnit, Moq, and FluentAssertions
-│   └── Infrastructure.Tests/      # Repository & Data layer tests with EF Core InMemory
-├── Dockerfile                     # Multi-stage optimized container build
-└── docker-compose.yml             # Orchestration for SQL Server 2022 & CRN Web API
+│   ├── Domain/                 # Enterprise Core
+│   │   ├── Entities/           # Product, Item, User, RefreshToken
+│   │   ├── Common/             # BaseEntity, AuditableEntity
+│   │   └── Exceptions/         # Domain-specific business exceptions
+│   │
+│   ├── Application/            # Business & Application Logic
+│   │   ├── Common/             # ApiResponse<T>, PagedResult<T>
+│   │   ├── DTOs/               # Products, Items, Auth request/response DTOs
+│   │   ├── Interfaces/         # IProductRepository, IItemRepository, IUnitOfWork, IJwtService
+│   │   ├── Services/           # ProductService, ItemService, AuthService
+│   │   └── Validators/         # FluentValidation rules for all incoming requests
+│   │
+│   ├── Infrastructure/         # External Concerns & Persistence
+│   │   ├── Data/               # ApplicationDbContext (EF Core 8)
+│   │   ├── Repositories/       # Generic & dedicated repositories, Unit of Work
+│   │   ├── Services/           # JwtTokenGenerator, BCrypt PasswordHasher
+│   │   └── EntityConfigurations/# Fluent API table configurations & cascade rules
+│   │
+│   └── API/                    # Presentation Layer (HTTP / REST)
+│       ├── Controllers/v1/     # ProductsController, ItemsController, AuthController
+│       ├── Extensions/         # ServiceCollectionExtensions, SwaggerExtensions
+│       ├── Filters/            # ValidationFilter (automatic FluentValidation handling)
+│       ├── Middleware/         # ExceptionHandlingMiddleware, SecurityHeadersMiddleware
+│       ├── Program.cs          # Pipeline bootstrap & DI composition
+│       └── appsettings.json    # Connection strings, JWT settings, Serilog config
+│
+└── tests/
+    ├── API.Tests/              # WebApplicationFactory Integration Tests
+    ├── Application.Tests/      # Service & validator unit tests (Moq + FluentAssertions)
+    └── Infrastructure.Tests/   # Repository & EF Core in-memory data tests
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## ✅ What Was Built (Completed Work)
 
-- **Runtime & Language**: .NET 8, C# 12
-- **Web API Framework**: ASP.NET Core Web API with API Versioning (`api/v1/...`)
-- **ORM & Data Access**: Entity Framework Core 8 with SQL Server provider
-- **Design Patterns**: Repository Pattern, Unit of Work, Dependency Injection
-- **Authentication**: JWT Bearer Tokens with cryptographic Refresh Token rotation
-- **Validation**: FluentValidation with automatic action filters
-- **Logging**: Serilog structured logging (Console & Rolling File sinks)
-- **Performance**: Response compression (Brotli/Gzip), `AsNoTracking()` for read queries, and database pagination
-- **Documentation**: Swagger / OpenAPI (Swashbuckle) with Bearer token authentication support
-- **Testing**: xUnit, Moq, FluentAssertions, and `Microsoft.AspNetCore.Mvc.Testing` (`WebApplicationFactory`)
-- **Containerization**: Docker multi-stage build & Docker Compose
+### 1. Products Management (`[dbo].[Product]`)
+- **Full CRUD Support**: Create, Read (single + paged), Update, and Delete.
+- **Auditing**: Automatic tracking of `CreatedBy`, `CreatedOn`, `ModifiedBy`, and `ModifiedOn`.
+- **Server-Side Pagination & Filtering**: Real-time keyword search across product name and creator, configurable page size (`page`, `pageSize`).
+- **Cascading Deletion**: Deleting a product automatically cleans up all associated inventory stock items.
+
+### 2. Hierarchical Stock Items (`[dbo].[Item]`)
+- **RESTful Sub-resources**: Endpoints mapped under `/api/v1/products/{productId}/items`.
+- **Isolated Item Lifecycle**: Add stock items, retrieve by ID, adjust quantities, and delete items with foreign key validation against the parent product.
+
+### 3. Authentication & Security System
+- **Identity & Registration**: Secure user signup (`/api/v1/auth/register`) with BCrypt password hashing.
+- **JWT Bearer Authentication**: Short-lived, digitally signed access tokens.
+- **Refresh Token Rotation**: Cryptographically secure refresh tokens stored in database with automatic rotation and revocation logic.
+- **Security Headers & Middleware**: Enforces X-Content-Type-Options, X-Frame-Options, CSP, and uniform error logging.
+
+### 4. Enterprise Cross-Cutting Concerns
+- **Standardized Response Envelope**: All API responses wrapped in `ApiResponse<T>` (`success`, `data`, `message`, `errors`).
+- **FluentValidation Pipeline**: Automatic model state interception with descriptive 400 Bad Request error dictionaries.
+- **Serilog Structured Logging**: File & console logs capturing execution context, timings, and HTTP status codes.
+- **Brotli & Gzip Compression**: Minimizes network bandwidth between API and UI.
 
 ---
 
-## 🗄️ Database Schema
+## 🔗 End-to-End Connectivity: API & UI Flow
 
-The database model follows the assessment specifications:
+The diagram below illustrates how the **Angular UI** interacts with the **.NET Core Web API**:
 
-```sql
-CREATE TABLE [dbo].[Product]
-(
-    [Id] INT NOT NULL PRIMARY KEY IDENTITY (1,1),
-    [ProductName] NVARCHAR(255) NOT NULL,
-    [CreatedBy] NVARCHAR(100) NOT NULL,
-    [CreatedOn] DATETIME NOT NULL,
-    [ModifiedBy] NVARCHAR(100) NULL,
-    [ModifiedOn] DATETIME NULL
-);
-
-CREATE TABLE [dbo].[Item]
-(
-    [Id] INT NOT NULL PRIMARY KEY IDENTITY (1,1),
-    [ProductId] INT NOT NULL FOREIGN KEY REFERENCES Product(Id) ON DELETE CASCADE,
-    [Quantity] INT NOT NULL
-);
-
-CREATE TABLE [dbo].[Users]
-(
-    [Id] INT NOT NULL PRIMARY KEY IDENTITY (1,1),
-    [Username] NVARCHAR(50) NOT NULL UNIQUE,
-    [Email] NVARCHAR(150) NOT NULL UNIQUE,
-    [PasswordHash] NVARCHAR(MAX) NOT NULL,
-    [Role] NVARCHAR(20) NOT NULL,
-    [CreatedAt] DATETIME NOT NULL
-);
-
-CREATE TABLE [dbo].[RefreshTokens]
-(
-    [Id] INT NOT NULL PRIMARY KEY IDENTITY (1,1),
-    [UserId] INT NOT NULL FOREIGN KEY REFERENCES Users(Id) ON DELETE CASCADE,
-    [Token] NVARCHAR(256) NOT NULL,
-    [ExpiresOn] DATETIME NOT NULL,
-    [CreatedOn] DATETIME NOT NULL,
-    [RevokedOn] DATETIME NULL,
-    [ReplacedByToken] NVARCHAR(MAX) NULL
-);
+```
++-----------------------------------------------------------------------------------+
+|                                 ANGULAR 15 UI                                     |
+|                               (http://localhost:4200)                             |
++-----------------------------------------------------------------------------------+
+       |                    |                    |                     |
+   (Products)           (Stock Items)       (Auth/Token)         (Health/Ping)
+       |                    |                    |                     |
+       v                    v                    v                     v
++-----------------------------------------------------------------------------------+
+|                        HTTP CLIENT & AUTH INTERCEPTOR                             |
+|  - Injects 'Authorization: Bearer <token>'                                        |
+|  - Auto-catches 401 Unauthorized -> Calls Refresh Token -> Retries failed request  |
+|  - Targets Dynamic Base URL: https://localhost:7025 (or http://localhost:5287)    |
++-----------------------------------------------------------------------------------+
+                                         |
+                            (CORS Preflight & REST HTTP)
+                                         |
+                                         v
++-----------------------------------------------------------------------------------+
+|                               .NET 8 WEB API                                      |
+|                           (https://localhost:7025)                                |
++-----------------------------------------------------------------------------------+
+|  1. CORS Middleware          : Validates Origin http://localhost:4200             |
+|  2. Security Headers         : Injects XSS, Framing, Content-Type headers         |
+|  3. Global Exception Handler : Catches unhandled errors, returns ApiResponse<T>   |
+|  4. Response Compression     : Compresses payload (Brotli / Gzip)                 |
+|  5. JWT Bearer Auth          : Validates Claims, Expiration, Issuer, Audience     |
+|  6. Validation Filter        : Evaluates FluentValidation rules                   |
+|  7. Controllers (v1)         : ProductsController, ItemsController, AuthController|
++-----------------------------------------------------------------------------------+
+                                         |
+                                         v
++-----------------------------------------------------------------------------------+
+|                       APPLICATION & INFRASTRUCTURE LAYER                          |
+|  - Services: ProductService, ItemService, AuthService, JwtService                 |
+|  - Repositories: ProductRepository, ItemRepository, RefreshTokenRepository        |
+|  - Unit of Work & EF Core 8: Change tracking & atomic transactions                |
++-----------------------------------------------------------------------------------+
+                                         |
+                                         v
++-----------------------------------------------------------------------------------+
+|                               SQL SERVER DATABASE                                 |
+|       Tables: [Product], [Item], [Users], [RefreshTokens]                         |
++-----------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 🔐 Authentication & Token Rotation Flow
+## 🛠️ Tech Stack & Dependencies
 
-```
-+------------+          +---------------+          +--------------------+
-|   Client   |  ----->  |  POST /login  |  ----->  | Validates BCrypt   |
-|            |  <-----  | Access Token  |  <-----  | Issues Access Token|
-|            |          | Refresh Token |          | & Refresh Token    |
-+------------+          +---------------+          +--------------------+
-      |
-      | (When Access Token Expires)
-      v
-+------------+          +-----------------------+
-|   Client   |  ----->  |  POST /refresh-token  |
-|            |          | (Old Refresh Token)   |
-|            |          +-----------------------+
-|            |                      |
-|            |                      v
-|            |          [Revoke Old Refresh Token]
-|            |          [Issue New Refresh Token] (Rotation)
-|            |                      |
-|            |  <-------------------+
-|            |  New Access & Refresh Tokens
-+------------+
-```
-
----
-
-## 🚀 API Endpoints Overview
-
-All endpoints follow RESTful resource-oriented naming standards and return a consistent response envelope (`ApiResponse<T>`).
-
-### 1. Products (`/api/v1/products`)
-| Method | Endpoint | Description | Status Codes |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/products?page=1&pageSize=10&search=...` | Paged products list | `200 OK` |
-| `GET` | `/api/v1/products/{id}` | Get product by ID (includes Items) | `200 OK`, `404 Not Found` |
-| `POST` | `/api/v1/products` | Create a new product (with optional items) | `201 Created`, `400 Bad Request` |
-| `PUT` | `/api/v1/products/{id}` | Update product details | `200 OK`, `400 Bad Request`, `404 Not Found` |
-| `DELETE` | `/api/v1/products/{id}` | Delete product and cascading items | `204 No Content`, `404 Not Found` |
-
-### 2. Product Items (Sub-resources) (`/api/v1/products/{productId}/items`)
-| Method | Endpoint | Description | Status Codes |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/products/{productId}/items` | Get all items for a product | `200 OK`, `404 Not Found` |
-| `GET` | `/api/v1/products/{productId}/items/{itemId}` | Get specific item details | `200 OK`, `404 Not Found` |
-| `POST` | `/api/v1/products/{productId}/items` | Add an item to a product | `201 Created`, `400 Bad Request` |
-| `PUT` | `/api/v1/products/{productId}/items/{itemId}` | Update item quantity | `200 OK`, `400 Bad Request` |
-| `DELETE` | `/api/v1/products/{productId}/items/{itemId}` | Remove item from product | `204 No Content`, `404 Not Found` |
-
-### 3. Authentication (`/api/v1/auth`)
-| Method | Endpoint | Description |
+| Area | Technology | Purpose |
 | :--- | :--- | :--- |
-| `POST` | `/api/v1/auth/register` | Register user account |
-| `POST` | `/api/v1/auth/login` | Authenticate and obtain JWT access + refresh token |
-| `POST` | `/api/v1/auth/refresh-token` | Rotate refresh token and get fresh access token |
-| `POST` | `/api/v1/auth/revoke-token` | Revoke a refresh token |
+| **Framework** | .NET 8.0 / C# 12 | High-performance Web API platform |
+| **Data Access** | Entity Framework Core 8 | Object-Relational Mapper (ORM) |
+| **Database** | Microsoft SQL Server (LocalDB / Express / Docker) | Relational persistence |
+| **API Versioning** | `Asp.Versioning.Mvc` (v1.0) | URL segment versioning (`/api/v1/...`) |
+| **Validation** | FluentValidation 11 | Strong typing & expressive rule declarations |
+| **Authentication** | `Microsoft.AspNetCore.Authentication.JwtBearer` | JWT validation & authorization |
+| **Hashing** | BCrypt.Net-Next | Salted password hashing |
+| **Logging** | Serilog & Serilog.Sinks.File | Structured contextual logging |
+| **Documentation**| Swashbuckle.AspNetCore (Swagger UI) | Interactive API exploration & testing |
+| **Unit Testing** | xUnit, Moq, FluentAssertions | Unit test suite |
+| **Integration** | `Microsoft.AspNetCore.Mvc.Testing` | Full-pipeline in-memory HTTP integration tests |
 
 ---
 
-## 🧪 Testing Strategy
+## 🗄️ Database Schema & Relationships
 
-The solution includes comprehensive unit and integration tests across multiple test projects:
+### Entity Relationship Diagram (ERD)
 
-```bash
-dotnet test CRN_Solution.sln
+```
++-----------------------------------+            +-----------------------------------+
+|             Product               |            |               Item                |
++-----------------------------------+            +-----------------------------------+
+| PK  Id          INT (Identity)    | 1        * | PK  Id         INT (Identity)     |
+|     ProductName NVARCHAR(255)     |<-----------| FK  ProductId  INT (Cascade Delete)|
+|     CreatedBy   NVARCHAR(100)     |            |     Quantity   INT                 |
+|     CreatedOn   DATETIME          |            +-----------------------------------+
+|     ModifiedBy  NVARCHAR(100) NULL|
+|     ModifiedOn  DATETIME NULL     |
++-----------------------------------+
+
++-----------------------------------+            +-----------------------------------+
+|              Users                |            |           RefreshTokens           |
++-----------------------------------+            +-----------------------------------+
+| PK  Id          INT (Identity)    | 1        * | PK  Id              INT (Identity)|
+|     Username    NVARCHAR(50) [UQ] |<-----------| FK  UserId          INT           |
+|     Email       NVARCHAR(150)[UQ] |            |     Token           NVARCHAR(256) |
+|     PasswordHash NVARCHAR(MAX)    |            |     ExpiresOn       DATETIME      |
+|     Role        NVARCHAR(20)      |            |     CreatedOn       DATETIME      |
+|     CreatedAt   DATETIME          |            |     RevokedOn       DATETIME NULL |
++-----------------------------------+            |     ReplacedByToken NVARCHAR(MAX) |
+                                                 +-----------------------------------+
 ```
 
-- **`Application.Tests`**: Unit tests verifying `ProductService`, `AuthService`, and `FluentValidation` rules using `Moq` and `FluentAssertions`.
-- **`Infrastructure.Tests`**: Unit tests for repository queries, pagination, and `AsNoTracking` with Entity Framework Core InMemory provider.
-- **`API.Tests`**: Full end-to-end integration tests using `WebApplicationFactory<Program>` validating HTTP status codes, middleware, and request/response payloads.
-
 ---
 
-## 🐳 Running with Docker
+## 🚀 API Endpoints Reference
 
-### Prerequisites
-- Docker & Docker Compose installed
-
-### Start SQL Server & API:
-```bash
-docker-compose up --build -d
-```
-
-- **Swagger Documentation**: `http://localhost:5000/swagger`
-- **SQL Server**: `localhost:1433` (Password: `YourStrong@Passw0rd!`)
-
----
-
-## 💻 Local Development Setup
-
-### 1. Configure Database Connection
-Update `appsettings.json` in `src/API/` with your local SQL Server instance:
+All responses conform to the consistent envelope:
 ```json
-"ConnectionStrings": {
-  "DefaultConnection": "Server=localhost;Database=CRNProductDb;Trusted_Connection=True;TrustServerCertificate=True;"
+{
+  "success": true,
+  "message": "Operation completed successfully.",
+  "data": { ... },
+  "errors": null
 }
 ```
 
-### 2. Run Migrations & Start API
+### 1. Products Resource (`/api/v1/products`)
+| HTTP Method | Route | Description | Auth Required |
+| :--- | :--- | :--- | :---: |
+| `GET` | `/api/v1/products?page=1&pageSize=10&search=lap` | Retrieve paginated products with optional search | Optional |
+| `GET` | `/api/v1/products/{id}` | Get product details including all attached items | Optional |
+| `POST` | `/api/v1/products` | Create a new product (with optional initial items) | Optional |
+| `PUT` | `/api/v1/products/{id}` | Update product name and audit information | Optional |
+| `DELETE` | `/api/v1/products/{id}` | Delete product and cascade delete all child items | Optional |
+
+### 2. Product Items Sub-Resource (`/api/v1/products/{productId}/items`)
+| HTTP Method | Route | Description | Auth Required |
+| :--- | :--- | :--- | :---: |
+| `GET` | `/api/v1/products/{productId}/items` | List all inventory items for a product | Optional |
+| `GET` | `/api/v1/products/{productId}/items/{itemId}` | Get specific item details | Optional |
+| `POST` | `/api/v1/products/{productId}/items` | Add a stock item with quantity to a product | Optional |
+| `PUT` | `/api/v1/products/{productId}/items/{itemId}` | Update quantity of a stock item | Optional |
+| `DELETE` | `/api/v1/products/{productId}/items/{itemId}` | Delete an individual item | Optional |
+
+### 3. Authentication Resource (`/api/v1/auth`)
+| HTTP Method | Route | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/auth/register` | Register a new account (`username`, `email`, `password`) |
+| `POST` | `/api/v1/auth/login` | Authenticate credentials -> returns JWT access & refresh token |
+| `POST` | `/api/v1/auth/refresh-token` | Submit expired access token + refresh token -> returns fresh pair |
+| `POST` | `/api/v1/auth/revoke-token` | Explicitly invalidate a refresh token |
+
+---
+
+## 🔐 Authentication & Security Architecture
+
+1. **Password Hashing**: Stored with strong one-way BCrypt salt (work factor 11).
+2. **JWT Access Tokens**: Encoded with HMAC-SHA256, contains standard claims (`NameIdentifier`, `Email`, `Role`, `Jti`). Configured with a short lifespan (e.g., 60 minutes).
+3. **Cryptographic Refresh Tokens**: 64-byte random sequence generated via `RandomNumberGenerator`.
+4. **Token Rotation**: When the client requests `/api/v1/auth/refresh-token`, the old refresh token is marked as `RevokedOn` with `ReplacedByToken` tracking, preventing token replay attacks.
+
+---
+
+## 🌐 CORS & Frontend Integration
+
+The API explicitly authorizes requests from the Angular development client in `Program.cs`:
+
+```csharp
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AngularPolicy", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:4200")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+```
+
+- **HTTPS Address**: `https://localhost:7025`
+- **HTTP Address**: `http://localhost:5287`
+- **Swagger Documentation URL**: `https://localhost:7025/swagger`
+
+---
+
+## 💻 Running the API Locally
+
+### Prerequisites
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- SQL Server (LocalDB, SQL Server Express, or Docker container)
+
+### Step 1: Configure Connection String
+Open `src/API/appsettings.json` and adjust the connection string to point to your SQL Server instance:
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=CRN_TechSoft_DB;Trusted_Connection=True;MultipleActiveResultSets=true;TrustServerCertificate=True"
+  }
+}
+```
+
+### Step 2: Database Setup (Two Easy Methods)
+
+#### Method A: Using SQL Server Management Studio (SSMS) (Recommended for Evaluators)
+Two production-ready SQL scripts are provided directly in the [`Database/`](file:///d:/CRN%20Tech%20Soft%20Task/CRUD_API/Database) folder:
+1. Open and execute [`Database/CreateDatabase.sql`](file:///d:/CRN%20Tech%20Soft%20Task/CRUD_API/Database/CreateDatabase.sql) in SSMS:
+   - Creates the `CRN_TechSoft_DB` database.
+   - Generates all tables (`Product`, `Item`, `Users`, `RefreshTokens`) with foreign keys and cascading rules.
+   - Creates performance indexes (`IX_Item_ProductId`, `IX_Product_ProductName`, etc.).
+2. Open and execute [`Database/SeedData.sql`](file:///d:/CRN%20Tech%20Soft%20Task/CRUD_API/Database/SeedData.sql) in SSMS:
+   - Inserts 10 realistic sample products and stock batches.
+   - Seeds a default Admin user (`Username: admin`, `Password: Password123!`).
+
+#### Method B: Automatic Code-First Creation
+If you prefer not to run manual scripts, the API automatically calls `dbContext.Database.EnsureCreated()` on initial startup when you launch the application.
+
+### Step 3: Run the API
 ```bash
 cd src/API
-dotnet run
+dotnet run --launch-profile https
 ```
-Swagger UI will be accessible at: `https://localhost:7059/swagger` or `http://localhost:5000/swagger`.
+The console will display:
+```
+Now listening on: https://localhost:7025
+Now listening on: http://localhost:5287
+```
 
-### 3. Start Angular UI
+Navigate to `https://localhost:7025/swagger` in your browser to inspect and interact with the endpoints.
+
+---
+
+## 🐳 Docker & Containerization
+
+A complete multi-stage `Dockerfile` and `docker-compose.yml` are provided in the project root:
+
 ```bash
-cd ../../CRN_Task_UI
-npm install
-ng serve
+# Build and run API along with SQL Server 2022
+docker compose up -d --build
 ```
-Open your browser at `http://localhost:4200/`.
+
+---
+
+## 🧪 Testing & Quality Assurance
+
+The solution contains a multi-tier automated test suite:
+
+```bash
+# Run all unit and integration tests
+dotnet test
+```
+
+- **`API.Tests`**: Validates full HTTP request/response pipeline via `WebApplicationFactory<Program>`, testing status codes, payload structures, and filter executions.
+- **`Application.Tests`**: Tests validation rules and business services using `Moq` and `FluentAssertions`.
+- **`Infrastructure.Tests`**: Exercises repository queries, cascading deletes, and EF Core mappings using in-memory databases.
