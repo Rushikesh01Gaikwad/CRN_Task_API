@@ -25,10 +25,13 @@ The backend strictly adheres to **Clean Architecture** (Separation of Concerns a
 
 ```
 CRUD_API/
+<<<<<<< HEAD
 ├── Database/                   # SQL Server Management Studio (SSMS) Scripts
 │   ├── CreateDatabase.sql      # Database DDL, Tables, Foreign Keys, Indexes
 │   └── SeedData.sql            # Demo data: Products, Items & Default Admin User
 │
+=======
+>>>>>>> 60aa962d7052d82a1e0092f737adf4407b2468aa
 ├── src/
 │   ├── Domain/                 # Enterprise Core
 │   │   ├── Entities/           # Product, Item, User, RefreshToken
@@ -281,6 +284,7 @@ Open `src/API/appsettings.json` and adjust the connection string to point to you
 }
 ```
 
+<<<<<<< HEAD
 ### Step 2: Database Setup (Two Easy Methods)
 
 #### Method A: Using SQL Server Management Studio (SSMS) (Recommended for Evaluators)
@@ -295,6 +299,13 @@ Two production-ready SQL scripts are provided directly in the [`Database/`](file
 
 #### Method B: Automatic Code-First Creation
 If you prefer not to run manual scripts, the API automatically calls `dbContext.Database.EnsureCreated()` on initial startup when you launch the application.
+=======
+### Step 2: Build & Apply Migrations / Create DB
+On initial startup, `Program.cs` automatically invokes `dbContext.Database.EnsureCreated()`, auto-generating tables if they don't already exist. Alternatively, apply EF migrations:
+```bash
+dotnet ef database update --project src/Infrastructure --startup-project src/API
+```
+>>>>>>> 60aa962d7052d82a1e0092f737adf4407b2468aa
 
 ### Step 3: Run the API
 ```bash
